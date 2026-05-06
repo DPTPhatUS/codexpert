@@ -35,6 +35,12 @@ Install dependencies with uv:
 uv pip install -e .
 ```
 
+Create a local `.env` file for credentials and settings:
+
+```bash
+cp .env.example .env
+```
+
 ### Local repository
 
 ```python
@@ -88,6 +94,24 @@ config = AgentConfig(
 ```
 
 Set `OPENAI_API_KEY` in your environment.
+
+The demo scripts load variables from `.env` automatically (see `.env.example`).
+
+## Demo scripts
+
+Local repository demo:
+
+```bash
+uv run python scripts/demo_local.py /path/to/repo \
+  --question "Where is the main entry point?"
+```
+
+Public GitHub demo:
+
+```bash
+uv run python scripts/demo_github.py https://github.com/owner/repo \
+  --question "How is authentication handled?"
+```
 
 ## Citations
 
