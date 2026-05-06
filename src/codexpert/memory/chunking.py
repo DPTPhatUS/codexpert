@@ -102,9 +102,12 @@ def chunk_file(
         return []
 
     source_bytes = source.encode("utf-8")
-    parser = get_parser(language)
-    tree = parser.parse(source_bytes)
-    nodes = _collect_nodes(tree.root_node, language)
+    try:
+        parser = get_parser(language)
+        tree = parser.parse(source_bytes)
+        nodes = _collect_nodes(tree.root_node, language)
+    except Exception:
+        nodes = []
 
     rel_path = repo_relative_path(repo_root, path)
     chunks: list[CodeChunk] = []
