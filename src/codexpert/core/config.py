@@ -1,0 +1,91 @@
+from __future__ import annotations
+
+from enum import Enum
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class LLMProvider(str, Enum):
+    GEMINI = "gemini"
+    OPENAI = "openai"
+
+
+class LLMConfig(BaseModel):
+    provider: LLMProvider = LLMProvider.GEMINI
+    model: str = "gemini-1.5-pro"
+    api_key_env: str = "GEMINI_API_KEY"
+    temperature: float = 0.2
+    max_output_tokens: int = 2048
+    timeout_s: int = 60
+
+
+class EmbeddingConfig(BaseModel):
+    provider: str = "sentence-transformers"
+    model: str = "all-MiniLM-L6-v2"
+    device: str = "cpu"
+
+
+class ChromaConfig(BaseModel):
+    persist_path: Path | None = None
+
+
+class ChunkingConfig(BaseModel):
+    max_chunk_chars: int = 4000
+    min_chunk_chars: int = 200
+    max_file_chars: int = 200000
+
+
+class AgentConfig(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    workspace_dir: Path = Field(default_factory=lambda: Path.home() / ".codexpert")
+    ripgrep_enabled: bool = True
+    max_iterations: int = 6
+    top_k: int = 5
+    enable_vector_index: bool = True
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
+    chroma: ChromaConfig = Field(default_factory=ChromaConfig)
+    chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
+
+    @field_validator("workspace_dir", mode="before")
+    @classmethod
+    def _coerce_workspace_dir(cls, value: Any) -> Path:
+        return Path(value).expanduser()
+
+    @property
+    def repo_cache_dir(self) -> Path:
+        return self.workspace_dir / "repos"
+
+    @property
+    def index_dir(self) -> Path:
+        return self.workspace_dir / "indexes"
+
+    @property
+    def chroma_dir(self) -> Path:
+        if self.chroma.persist_path:
+            return self.chroma.persist_path
+        return self.index_dir / "chroma"
+
+
+class RepoSpec(BaseModel):
+    repo_id: str
+    source: str
+    ref: str | None = None
+
+    @classmethod
+    def from_source(cls, source: str, repo_id: str | None = None) -> "RepoSpec":
+        resolved_id = repo_id or _slugify_repo_id(source)
+        return cls(repo_id=resolved_id, source=source)
+
+
+def _slugify_repo_id(source: str) -> str:
+    cleaned = source.strip().rstrip("/")
+    cleaned = cleaned.replace("https://", "").replace("http://", "")
+    cleaned = cleaned.replace("git@", "").replace(":", "/")
+    cleaned = cleaned.replace("github.com/", "")
+    cleaned = cleaned.replace(".", "-").replace("/", "-")
+    cleaned = "".join(ch for ch in cleaned if ch.isalnum() or ch == "-")
+    return cleaned or "repo"
