@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class LLMProvider(str, Enum):
     GEMINI = "gemini"
     OPENAI = "openai"
+    MISTRAL = "mistral"
 
 
 class LLMConfig(BaseModel):

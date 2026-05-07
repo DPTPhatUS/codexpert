@@ -16,7 +16,7 @@ def semantic_search(repo_index, query: str, top_k: int, config) -> list[CodeSnip
     results = collection.query(
         query_texts=[query],
         n_results=top_k,
-        include=["documents", "metadatas", "ids"],
+        include=["documents", "metadatas"],
     )
     snippets: list[CodeSnippet] = []
     for doc, metadata in zip(results.get("documents", [[]])[0], results.get("metadatas", [[]])[0]):

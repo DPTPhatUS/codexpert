@@ -52,8 +52,8 @@ def _build_vector_store(
             "path": chunk.path,
             "start_line": chunk.start_line,
             "end_line": chunk.end_line,
-            "symbol": chunk.symbol,
-            "language": chunk.language,
+            "symbol": chunk.symbol or "",
+            "language": chunk.language or "",
         }
         for chunk in chunks
     ]

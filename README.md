@@ -7,7 +7,7 @@ Codexpert is a Python library for AI-powered QA and deep analysis over entire co
 - Dual-target analysis for local folders and public GitHub repos.
 - Multi-faceted understanding via Tree-sitter parsing, ChromaDB vectors, BM25 lexical search, and NetworkX dependency graphs.
 - Stateless, `repo_id`-scoped queries for multi-tenant and concurrent usage.
-- Pluggable LLM provider layer (Gemini and OpenAI).
+- Pluggable LLM provider layer (Gemini, OpenAI, and Mistral).
 
 ## Architecture
 
@@ -94,6 +94,26 @@ config = AgentConfig(
 ```
 
 Set `OPENAI_API_KEY` in your environment.
+
+To use Mistral:
+
+```python
+from codexpert.core.config import AgentConfig, LLMConfig, LLMProvider
+
+config = AgentConfig(
+	llm=LLMConfig(provider=LLMProvider.MISTRAL, model="mistral-large-latest")
+)
+```
+
+Set `MISTRAL_API_KEY` in your environment.
+
+`.env` example:
+
+```bash
+CODEXPERT_LLM_PROVIDER=mistral
+CODEXPERT_LLM_MODEL=mistral-large-latest
+MISTRAL_API_KEY="..."
+```
 
 The demo scripts load variables from `.env` automatically (see `.env.example`).
 

@@ -21,13 +21,39 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def _parse_provider(value: str) -> LLMProvider:
+    normalized = value.strip().lower()
+    allowed = ", ".join(member.value for member in LLMProvider)
+    if normalized == "mistral" and "mistral" not in {member.value for member in LLMProvider}:
+        raise ValueError(
+            "Invalid CODEXPERT_LLM_PROVIDER='mistral': provider not available in this build. "
+            f"Supported providers: {allowed}"
+        )
+    try:
+        return LLMProvider(normalized)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid CODEXPERT_LLM_PROVIDER={value!r}. Expected one of: gemini, openai, mistral"
+        ) from exc
+
+
+def _default_model(provider: LLMProvider) -> str:
+    if provider == LLMProvider.OPENAI:
+        return "gpt-4o-mini"
+    if provider == LLMProvider.GEMINI:
+        return "gemini-1.5-pro"
+    if provider.value == "mistral":
+        return "mistral-large-latest"
+    raise ValueError(f"Unsupported provider: {provider.value}")
+
+
 def _build_config() -> AgentConfig:
     defaults = AgentConfig()
-    provider_value = os.getenv("CODEXPERT_LLM_PROVIDER", "gemini").lower()
-    provider = LLMProvider.OPENAI if provider_value == "openai" else LLMProvider.GEMINI
+    provider_value = os.getenv("CODEXPERT_LLM_PROVIDER", "gemini")
+    provider = _parse_provider(provider_value)
     model = os.getenv("CODEXPERT_LLM_MODEL")
     if not model:
-        model = "gpt-4o-mini" if provider == LLMProvider.OPENAI else "gemini-1.5-pro"
+        model = _default_model(provider)
     llm = LLMConfig(provider=provider, model=model)
     workspace = os.getenv("CODEXPERT_WORKSPACE_DIR")
     workspace_dir = Path(workspace).expanduser() if workspace else defaults.workspace_dir
