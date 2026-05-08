@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import sys
+from types import ModuleType
+
+import pytest
 
 from codexpert.core.config import LLMConfig, LLMProvider
-from codexpert.llm.router import resolve_llm_config
+from codexpert.llm.router import build_llm_client, resolve_llm_config
 
 
 def _load_demo_local():
@@ -49,3 +53,36 @@ def test_resolve_mistral_preserves_explicit_model_and_env() -> None:
 
 def test_parse_provider_accepts_mistral() -> None:
     assert _load_demo_local()._parse_provider("mistral") == LLMProvider.MISTRAL
+
+
+def test_build_openai_client_requires_api_key(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    config = LLMConfig(provider=LLMProvider.OPENAI)
+
+    with pytest.raises(RuntimeError, match="Missing API key in env var OPENAI_API_KEY"):
+        build_llm_client(config)
+
+
+def test_build_openai_client_uses_lazy_langchain_import(monkeypatch) -> None:
+    calls: list[dict] = []
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs) -> None:
+            calls.append(kwargs)
+
+    module = ModuleType("langchain_openai")
+    module.ChatOpenAI = FakeChatOpenAI
+    monkeypatch.setitem(sys.modules, "langchain_openai", module)
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+
+    build_llm_client(LLMConfig(provider=LLMProvider.OPENAI, timeout_s=12))
+
+    assert calls == [
+        {
+            "model": "gpt-4o-mini",
+            "api_key": "k",
+            "temperature": 0.2,
+            "max_tokens": 2048,
+            "timeout": 12,
+        }
+    ]

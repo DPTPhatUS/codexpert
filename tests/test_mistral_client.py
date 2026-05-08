@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import sys
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
 
 import pytest
 
 from codexpert.core.config import LLMConfig, LLMProvider
-from codexpert.llm.mistral import MistralClient
+from codexpert.llm.router import build_llm_client
 
 
 def _config() -> LLMConfig:
@@ -22,48 +22,29 @@ def test_mistral_client_requires_api_key(monkeypatch) -> None:
     monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
 
     with pytest.raises(RuntimeError, match="Missing API key in env var MISTRAL_API_KEY"):
-        MistralClient(_config())
+        build_llm_client(_config())
 
 
-@pytest.mark.asyncio
-async def test_mistral_client_sends_system_and_user_messages(monkeypatch) -> None:
+def test_mistral_client_builds_langchain_chat_model(monkeypatch) -> None:
     calls: list[dict] = []
 
-    class FakeChat:
-        async def complete_async(self, **kwargs):
+    class FakeChatMistralAIAllKw:
+        def __init__(self, **kwargs) -> None:
             calls.append(kwargs)
-            return SimpleNamespace(
-                choices=[SimpleNamespace(message=SimpleNamespace(content="done"))]
-            )
 
-    class FakeMistral:
-        def __init__(self, *, api_key: str) -> None:
-            self.api_key = api_key
-            self.chat = FakeChat()
-
-    client_module = ModuleType("mistralai.client")
-    client_module.Mistral = FakeMistral
-    package_module = ModuleType("mistralai")
-    package_module.client = client_module
-    monkeypatch.setitem(sys.modules, "mistralai", package_module)
-    monkeypatch.setitem(sys.modules, "mistralai.client", client_module)
+    module = ModuleType("langchain_mistralai")
+    module.ChatMistralAI = FakeChatMistralAIAllKw
+    monkeypatch.setitem(sys.modules, "langchain_mistralai", module)
     monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
 
-    client = MistralClient(_config())
-    result = await client.complete("user prompt", system="system prompt")
+    build_llm_client(_config())
 
-    assert result == "done"
     assert calls == [
         {
             "model": "mistral-small-latest",
-            "messages": [
-                {"role": "system", "content": "system prompt"},
-                {"role": "user", "content": "user prompt"},
-            ],
+            "api_key": "test-key",
             "temperature": 0.2,
             "max_tokens": 256,
-            "stream": False,
-            "response_format": {"type": "text"},
-            "timeout_ms": 60000,
+            "timeout": 60,
         }
     ]

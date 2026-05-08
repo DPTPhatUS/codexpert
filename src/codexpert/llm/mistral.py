@@ -2,35 +2,22 @@ from __future__ import annotations
 
 import os
 
+from langchain_core.language_models.chat_models import BaseChatModel
+
 from codexpert.core.config import LLMConfig
-from codexpert.llm.base import LLMClient
 
 
-class MistralClient(LLMClient):
-    def __init__(self, config: LLMConfig) -> None:
-        api_key = os.getenv(config.api_key_env)
-        if not api_key:
-            raise RuntimeError(f"Missing API key in env var {config.api_key_env}")
-        from mistralai.client import Mistral
+def build_mistral_chat_model(config: LLMConfig) -> BaseChatModel:
+    api_key = os.getenv(config.api_key_env)
+    if not api_key:
+        raise RuntimeError(f"Missing API key in env var {config.api_key_env}")
 
-        self.client = Mistral(api_key=api_key)
-        self.model = config.model
-        self.temperature = config.temperature
-        self.max_output_tokens = config.max_output_tokens
-        self.timeout_ms = config.timeout_s * 1000
+    from langchain_mistralai import ChatMistralAI
 
-    async def complete(self, prompt: str, system: str | None = None) -> str:
-        messages = []
-        if system:
-            messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": prompt})
-        response = await self.client.chat.complete_async(
-            model=self.model,
-            messages=messages,
-            temperature=self.temperature,
-            max_tokens=self.max_output_tokens,
-            stream=False,
-            response_format={"type": "text"},
-            timeout_ms=self.timeout_ms,
-        )
-        return response.choices[0].message.content or ""
+    return ChatMistralAI(
+        model=config.model,
+        api_key=api_key,
+        temperature=config.temperature,
+        max_tokens=config.max_output_tokens,
+        timeout=config.timeout_s,
+    )

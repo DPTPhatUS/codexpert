@@ -1,10 +1,8 @@
 from __future__ import annotations
 
+from langchain_core.language_models.chat_models import BaseChatModel
+
 from codexpert.core.config import LLMConfig, LLMProvider
-from codexpert.llm.base import LLMClient
-from codexpert.llm.gemini import GeminiClient
-from codexpert.llm.mistral import MistralClient
-from codexpert.llm.openai import OpenAIClient
 
 
 _PROVIDER_DEFAULTS: dict[LLMProvider, tuple[str, str]] = {
@@ -30,10 +28,16 @@ def resolve_llm_config(config: LLMConfig) -> LLMConfig:
     )
 
 
-def build_llm_client(config: LLMConfig) -> LLMClient:
+def build_llm_client(config: LLMConfig) -> BaseChatModel:
     resolved = resolve_llm_config(config)
     if resolved.provider == LLMProvider.OPENAI:
-        return OpenAIClient(resolved)
+        from codexpert.llm.openai import build_openai_chat_model
+
+        return build_openai_chat_model(resolved)
     if resolved.provider == LLMProvider.MISTRAL:
-        return MistralClient(resolved)
-    return GeminiClient(resolved)
+        from codexpert.llm.mistral import build_mistral_chat_model
+
+        return build_mistral_chat_model(resolved)
+    from codexpert.llm.gemini import build_gemini_chat_model
+
+    return build_gemini_chat_model(resolved)

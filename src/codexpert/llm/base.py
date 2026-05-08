@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from langchain_core.language_models.chat_models import BaseChatModel
 
-
-class LLMClient(ABC):
-    @abstractmethod
-    async def complete(self, prompt: str, system: str | None = None) -> str:
-        raise NotImplementedError
+LLMClient = BaseChatModel
