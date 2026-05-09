@@ -4,7 +4,7 @@ import operator
 from typing import Annotated, Any, TypedDict
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -19,6 +19,20 @@ from codexpert.core.types import (
     ToolObservation,
 )
 from codexpert.tools.registry import ToolRegistry
+
+
+DEFAULT_AGENT_SYSTEM_PROMPT = (
+    "You are Codexpert, a codebase question-answering agent. "
+    "Use the available repository search tools to gather evidence before answering "
+    "questions about code. Prefer precise file, symbol, and error-message searches. "
+    "Do not guess about implementation details when tools can inspect the repository."
+)
+
+DEFAULT_FINAL_ANSWER_SYSTEM_PROMPT = (
+    "You are Codexpert, generating the final answer for a repository question. "
+    "Base the answer only on observed repository evidence. Cite file ranges when "
+    "evidence is used, and do not invent paths, line numbers, APIs, or behavior."
+)
 
 
 class FinalAnswer(BaseModel):
@@ -94,7 +108,12 @@ class ReActOrchestrator:
 
     async def _model(self, state: ReActState) -> dict[str, Any]:
         bound = self.llm.bind_tools(self.tools.as_langchain_tools())
-        response = await bound.ainvoke(state["messages"])
+        response = await bound.ainvoke(
+            [
+                SystemMessage(content=self._agent_system_prompt()),
+                *state["messages"],
+            ]
+        )
         return {"messages": [response]}
 
     def _route_from_model(self, state: ReActState) -> str:
@@ -112,7 +131,6 @@ class ReActOrchestrator:
 
         rendered_observations = _render_observations(state["observations"])
         final_prompt = (
-            "You are generating the final answer for a repository question.\n\n"
             f"Question:\n{state['question']}\n\n"
             "Observed evidence:\n"
             f"{rendered_observations}\n\n"
@@ -125,8 +143,23 @@ class ReActOrchestrator:
             "- If no citation is available, answer without citations.\n"
         )
 
-        answer = await structured.ainvoke([HumanMessage(content=final_prompt)])
+        answer = await structured.ainvoke(
+            [
+                SystemMessage(content=self._final_answer_system_prompt()),
+                HumanMessage(content=final_prompt),
+            ]
+        )
         return {"answer": answer.answer}
+
+    def _agent_system_prompt(self) -> str:
+        return getattr(self.config, "agent_system_prompt", DEFAULT_AGENT_SYSTEM_PROMPT)
+
+    def _final_answer_system_prompt(self) -> str:
+        return getattr(
+            self.config,
+            "final_answer_system_prompt",
+            DEFAULT_FINAL_ANSWER_SYSTEM_PROMPT,
+        )
 
 
 def _collect_citations(observations: list[ToolObservation]) -> list[Citation]:

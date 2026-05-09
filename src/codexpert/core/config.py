@@ -45,6 +45,17 @@ class AgentConfig(BaseModel):
     ripgrep_enabled: bool = True
     max_iterations: int = 6
     top_k: int = 5
+    agent_system_prompt: str = (
+        "You are Codexpert, a codebase question-answering agent. "
+        "Use the available repository search tools to gather evidence before answering "
+        "questions about code. Prefer precise file, symbol, and error-message searches. "
+        "Do not guess about implementation details when tools can inspect the repository."
+    )
+    final_answer_system_prompt: str = (
+        "You are Codexpert, generating the final answer for a repository question. "
+        "Base the answer only on observed repository evidence. Cite file ranges when "
+        "evidence is used, and do not invent paths, line numbers, APIs, or behavior."
+    )
     enable_vector_index: bool = True
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)

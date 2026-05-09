@@ -6,7 +6,7 @@ from uuid import uuid4
 from typing import Annotated
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import InjectedToolCallId, tool
 from langgraph.types import Command
 
@@ -122,11 +122,15 @@ async def test_compiled_run_uses_toolnode_and_returns_query_response(
     assert [c.path for c in response.citations] == ["pkg/file_1.py"]
     assert llm.bound_tools
     first_messages = llm.calls[0]
-    assert isinstance(first_messages[0], HumanMessage)
-    assert "History:\nold" in first_messages[0].content
+    assert isinstance(first_messages[0], SystemMessage)
+    assert "codebase question-answering agent" in first_messages[0].content
+    assert isinstance(first_messages[1], HumanMessage)
+    assert "History:\nold" in first_messages[1].content
     final_messages = llm.structured.calls[0]
-    assert isinstance(final_messages[0], HumanMessage)
-    final_prompt = final_messages[0].content
+    assert isinstance(final_messages[0], SystemMessage)
+    assert "Base the answer only on observed repository evidence" in final_messages[0].content
+    assert isinstance(final_messages[1], HumanMessage)
+    final_prompt = final_messages[1].content
     assert "Question:\nwhat?" in final_prompt
     assert "pkg/file_1.py:10-12" in final_prompt
     assert "text: x = 1" in final_prompt
