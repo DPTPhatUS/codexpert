@@ -117,6 +117,22 @@ MISTRAL_API_KEY="..."
 
 The demo scripts load variables from `.env` automatically (see `.env.example`).
 
+## LangSmith tracing
+
+Codexpert uses LangChain and LangGraph runnables, so LangSmith tracing works through
+standard LangSmith environment variables. No code changes are required in callers:
+
+```bash
+export LANGSMITH_TRACING=true
+export LANGSMITH_API_KEY="..."
+export LANGSMITH_PROJECT=codexpert
+```
+
+The demo scripts load these values from `.env`. Query runs are named
+`codexpert.query` and include `repo_id`, `top_k`, and `max_iterations` metadata.
+You can add default tags with `AgentConfig(trace_tags=["codexpert", "dev"])`, and
+pass per-request metadata with `QueryRequest(..., metadata={"user_id": "..."})`.
+
 ## Demo scripts
 
 Local repository demo:

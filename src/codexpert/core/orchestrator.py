@@ -77,7 +77,7 @@ class ReActOrchestrator:
             "answer": None,
             "trace": [],
         }
-        final_state = await self.graph.ainvoke(state)
+        final_state = await self.graph.ainvoke(state, self._trace_config(request, state))
         citations = _collect_citations(final_state["observations"])
         return QueryResponse(
             answer=final_state.get("answer") or "",
@@ -160,6 +160,19 @@ class ReActOrchestrator:
             "final_answer_system_prompt",
             DEFAULT_FINAL_ANSWER_SYSTEM_PROMPT,
         )
+
+    def _trace_config(self, request: QueryRequest, state: ReActState) -> dict[str, Any]:
+        metadata = {
+            "repo_id": request.repo_id,
+            "top_k": state["top_k"],
+            "max_iterations": state["max_iterations"],
+            **request.metadata,
+        }
+        return {
+            "run_name": "codexpert.query",
+            "tags": list(getattr(self.config, "trace_tags", ["codexpert"])),
+            "metadata": metadata,
+        }
 
 
 def _collect_citations(observations: list[ToolObservation]) -> list[Citation]:

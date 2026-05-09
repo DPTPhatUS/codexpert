@@ -45,6 +45,7 @@ class AgentConfig(BaseModel):
     ripgrep_enabled: bool = True
     max_iterations: int = 6
     top_k: int = 5
+    trace_tags: list[str] = Field(default_factory=lambda: ["codexpert"])
     agent_system_prompt: str = (
         "You are Codexpert, a codebase question-answering agent. "
         "Use the available repository search tools to gather evidence before answering "
