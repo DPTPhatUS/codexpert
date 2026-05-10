@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from codexpert.core.citations import format_citations
 from codexpert.core.types import (
     Citation,
+    CodeSnippet,
     ExecutionTraceStep,
     QueryRequest,
     QueryResponse,
@@ -23,9 +24,13 @@ from codexpert.tools.registry import ToolRegistry
 
 DEFAULT_AGENT_SYSTEM_PROMPT = (
     "You are Codexpert, a codebase question-answering agent. "
-    "Use the available repository search tools to gather evidence before answering "
-    "questions about code. Prefer precise file, symbol, and error-message searches. "
-    "Do not guess about implementation details when tools can inspect the repository."
+    "Use repository tools to gather evidence before answering implementation "
+    "questions. Prefer grep_search for exact identifiers and errors, read_file "
+    "for cited line ranges, symbol and reference tools for code navigation, "
+    "semantic_search for conceptual discovery, doc_search for repository docs, "
+    "and git_history_search for change-history questions. Stop when you have "
+    "enough citation-ready evidence. Do not guess about implementation details "
+    "when tools can inspect the repository."
 )
 
 DEFAULT_FINAL_ANSWER_SYSTEM_PROMPT = (
@@ -39,6 +44,18 @@ class FinalAnswer(BaseModel):
     answer: str
 
 
+def _merge_evidence(left: list[CodeSnippet], right: list[CodeSnippet]) -> list[CodeSnippet]:
+    merged: list[CodeSnippet] = []
+    seen: set[tuple[str, int, int, str | None]] = set()
+    for snippet in [*left, *right]:
+        key = (snippet.path, snippet.start_line, snippet.end_line, snippet.symbol)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(snippet)
+    return merged
+
+
 class ReActState(TypedDict):
     repo_id: str
     question: str
@@ -46,6 +63,7 @@ class ReActState(TypedDict):
     max_iterations: int
     messages: Annotated[list[AnyMessage], add_messages]
     observations: Annotated[list[ToolObservation], operator.add]
+    evidence_set: Annotated[list[CodeSnippet], _merge_evidence]
     trace: Annotated[list[ExecutionTraceStep], operator.add]
     iterations: Annotated[int, operator.add]
     answer: str | None
@@ -74,11 +92,13 @@ class ReActOrchestrator:
             "max_iterations": self.config.max_iterations,
             "messages": [HumanMessage(content=content)],
             "observations": [],
+            "evidence_set": [],
             "answer": None,
             "trace": [],
         }
         final_state = await self.graph.ainvoke(state, self._trace_config(request, state))
-        citations = _collect_citations(final_state["observations"])
+        evidence = self._limit_evidence(final_state.get("evidence_set", []))
+        citations = _collect_citations(evidence)
         return QueryResponse(
             answer=final_state.get("answer") or "",
             citations=citations,
@@ -90,16 +110,27 @@ class ReActOrchestrator:
         graph.add_node("guard", self._guard)
         graph.add_node("model", self._model)
         graph.add_node("tools", self._tools_node)
+        graph.add_node("evidence_check", self._evidence_check)
         graph.add_node("final", self._final)
         graph.add_edge(START, "guard")
         graph.add_conditional_edges("guard", self._route_from_guard)
         graph.add_conditional_edges("model", self._route_from_model)
-        graph.add_edge("tools", "guard")
+        graph.add_edge("tools", "evidence_check")
+        graph.add_edge("evidence_check", "guard")
         graph.add_edge("final", END)
         return graph.compile()
 
     async def _guard(self, state: ReActState) -> dict[str, Any]:
         return {}
+
+    async def _evidence_check(self, state: ReActState) -> dict[str, Any]:
+        max_snippets = int(getattr(self.config, "max_evidence_snippets", 20))
+        snippets = [
+            snippet
+            for observation in state["observations"]
+            for snippet in observation.snippets
+        ][:max_snippets]
+        return {"evidence_set": snippets}
 
     def _route_from_guard(self, state: ReActState) -> str:
         if state["iterations"] >= state["max_iterations"]:
@@ -124,15 +155,19 @@ class ReActOrchestrator:
 
     async def _final(self, state: ReActState) -> dict[str, Any]:
         structured = self.llm.with_structured_output(FinalAnswer)
-        citations = _collect_citations(state["observations"])
+        evidence = self._limit_evidence(state.get("evidence_set", []))
+        citations = _collect_citations(evidence)
         rendered_citations = "\n".join(f"- {value}" for value in format_citations(citations))
         if not rendered_citations:
             rendered_citations = "- (none)"
 
+        rendered_evidence = _render_evidence(evidence)
         rendered_observations = _render_observations(state["observations"])
         final_prompt = (
             f"Question:\n{state['question']}\n\n"
-            "Observed evidence:\n"
+            "Citation-ready evidence:\n"
+            f"{rendered_evidence}\n\n"
+            "Tool trace and notes:\n"
             f"{rendered_observations}\n\n"
             "Available citations (use only these when citing):\n"
             f"{rendered_citations}\n\n"
@@ -140,7 +175,7 @@ class ReActOrchestrator:
             "- If evidence is used, cite inline using format [path:start-end].\n"
             "- Use only citations from the available list above.\n"
             "- Do not invent file paths or line ranges.\n"
-            "- If no citation is available, answer without citations.\n"
+            "- If no citation is available, say repository evidence was not found.\n"
         )
 
         answer = await structured.ainvoke(
@@ -174,24 +209,47 @@ class ReActOrchestrator:
             "metadata": metadata,
         }
 
+    def _limit_evidence(self, evidence: list[CodeSnippet]) -> list[CodeSnippet]:
+        max_snippets = int(getattr(self.config, "max_evidence_snippets", 20))
+        return evidence[:max_snippets]
 
-def _collect_citations(observations: list[ToolObservation]) -> list[Citation]:
+
+def _collect_citations(snippets: list[CodeSnippet]) -> list[Citation]:
     citations: list[Citation] = []
     seen = set()
-    for obs in observations:
-        for snippet in obs.snippets:
-            key = (snippet.path, snippet.start_line, snippet.end_line)
-            if key in seen:
-                continue
-            seen.add(key)
-            citations.append(
-                Citation(
-                    path=snippet.path,
-                    start_line=snippet.start_line,
-                    end_line=snippet.end_line,
-                )
+    for snippet in snippets:
+        key = (snippet.path, snippet.start_line, snippet.end_line)
+        if key in seen:
+            continue
+        seen.add(key)
+        citations.append(
+            Citation(
+                path=snippet.path,
+                start_line=snippet.start_line,
+                end_line=snippet.end_line,
             )
+        )
     return citations
+
+
+def _render_evidence(snippets: list[CodeSnippet]) -> str:
+    if not snippets:
+        return "- (none)"
+
+    lines: list[str] = []
+    for index, snippet in enumerate(snippets, start=1):
+        label = f"{index}. {snippet.path}:{snippet.start_line}-{snippet.end_line}"
+        metadata = []
+        if snippet.symbol:
+            metadata.append(f"symbol={snippet.symbol}")
+        if snippet.language:
+            metadata.append(f"language={snippet.language}")
+        if metadata:
+            label = f"{label} ({', '.join(metadata)})"
+        lines.append(label)
+        if snippet.text:
+            lines.append(f"   text: {snippet.text}")
+    return "\n".join(lines)
 
 
 def _render_observations(observations: list[ToolObservation]) -> str:

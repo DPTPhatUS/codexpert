@@ -45,12 +45,18 @@ class AgentConfig(BaseModel):
     ripgrep_enabled: bool = True
     max_iterations: int = 6
     top_k: int = 5
+    max_tool_message_chars: int = 4000
+    max_evidence_snippets: int = 20
     trace_tags: list[str] = Field(default_factory=lambda: ["codexpert"])
     agent_system_prompt: str = (
         "You are Codexpert, a codebase question-answering agent. "
-        "Use the available repository search tools to gather evidence before answering "
-        "questions about code. Prefer precise file, symbol, and error-message searches. "
-        "Do not guess about implementation details when tools can inspect the repository."
+        "Use repository tools to gather evidence before answering implementation "
+        "questions. Prefer grep_search for exact identifiers and errors, read_file "
+        "for cited line ranges, symbol and reference tools for code navigation, "
+        "semantic_search for conceptual discovery, doc_search for repository docs, "
+        "and git_history_search for change-history questions. Stop when you have "
+        "enough citation-ready evidence. Do not guess about implementation details "
+        "when tools can inspect the repository."
     )
     final_answer_system_prompt: str = (
         "You are Codexpert, generating the final answer for a repository question. "

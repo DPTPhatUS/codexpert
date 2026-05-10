@@ -13,7 +13,7 @@ Codexpert is a Python library for AI-powered QA and deep analysis over entire co
 
 1. API interface: public classes that validate inputs and dispatch queries.
 2. Orchestration layer: LangGraph ReAct loop for reasoning and tool calls.
-3. Action layer: tools for semantic search, lexical search, ripgrep, and graph queries.
+3. Action layer: tools for file listing/reading, exact and semantic search, symbol/reference lookup, docs search, git history, and graph queries.
 4. Knowledge layer: ingestion, chunking, and index building.
 
 ## Package layout

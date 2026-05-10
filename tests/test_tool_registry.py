@@ -33,10 +33,18 @@ async def test_as_langchain_tools_exposes_expected_tool_names() -> None:
     tools = registry.as_langchain_tools()
 
     assert [tool.name for tool in tools] == [
+        "list_files",
+        "read_file",
+        "grep_search",
         "semantic_search",
         "lexical_search",
         "ripgrep_search",
-        "graph_query",
+        "symbol_search",
+        "definition_lookup",
+        "references_search",
+        "dependency_graph_query",
+        "doc_search",
+        "git_history_search",
     ]
 
 
@@ -59,13 +67,16 @@ async def test_runtime_tool_returns_command_update_with_message(monkeypatch: pyt
     command = await lexical_tool.coroutine(query="needle", runtime=runtime)
     update = command.update
 
-    assert set(update.keys()) == {"observations", "trace", "iterations", "messages"}
+    assert set(update.keys()) == {"observations", "evidence_set", "trace", "iterations", "messages"}
     assert update["iterations"] == 1
     assert update["observations"][0].tool == "lexical_search"
     assert update["observations"][0].query == "needle"
+    assert [snippet.path for snippet in update["evidence_set"]] == ["a.py", "b.py"]
     assert update["trace"][0].iteration == 6
     assert update["trace"][0].action == "lexical_search"
     assert update["trace"][0].result_count == 2
     assert isinstance(update["messages"][0], ToolMessage)
     assert update["messages"][0].tool_call_id == "call-42"
     assert "lexical_search hits=2" in str(update["messages"][0].content)
+    assert "a.py:1-2" in str(update["messages"][0].content)
+    assert "x" in str(update["messages"][0].content)
