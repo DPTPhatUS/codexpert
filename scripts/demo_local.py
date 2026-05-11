@@ -90,6 +90,13 @@ async def main() -> None:
         print("\nCitations:")
         for citation in response.citations:
             print(f"- {citation.path}:{citation.start_line}-{citation.end_line}")
+    if response.trace:
+        print("\nExecution Trace:")
+        for step in response.trace:
+            print(
+                f"Iteration {step.iteration}: Action={step.action}, "
+                f"Query={step.query}, ResultCount={step.result_count}, Notes={step.notes}"
+            )
 
 
 if __name__ == "__main__":
