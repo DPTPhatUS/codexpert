@@ -5,15 +5,15 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 from codexpert.memory.chunking import CodeChunk
-from codexpert.tools.source_navigation import (
+from codexpert.tools.navigation import (
     definition_lookup,
     doc_search,
-    grep_search,
     list_files,
     read_file,
     references_search,
     symbol_search,
 )
+from codexpert.tools.search import grep_search
 
 
 class _Storage:

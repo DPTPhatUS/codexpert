@@ -14,7 +14,10 @@ if "codexpert.llm.gemini" not in sys.modules:
     sys.modules["codexpert.llm.gemini"] = gemini_stub
 
 from codexpert.core.types import CodeSnippet
+from codexpert.core.types import ToolObservation
 from codexpert.tools.registry import ToolRegistry
+from codexpert.tools.base import ToolContext
+from codexpert.tools.base import run_tool_with_runtime
 
 
 class _FakeRuntime:
@@ -35,16 +38,15 @@ async def test_as_langchain_tools_exposes_expected_tool_names() -> None:
     assert [tool.name for tool in tools] == [
         "list_files",
         "read_file",
+        "symbol_search",
+        "definition_lookup",
+        "references_search",
+        "doc_search",
         "grep_search",
         "semantic_search",
         "lexical_search",
         "ripgrep_search",
-        "symbol_search",
-        "definition_lookup",
-        "references_search",
         "dependency_graph_query",
-        "doc_search",
-        "git_history_search",
     ]
 
 
@@ -59,7 +61,7 @@ async def test_runtime_tool_returns_command_update_with_message(monkeypatch: pyt
             CodeSnippet(path="b.py", start_line=3, end_line=4, text="y"),
         ]
 
-    monkeypatch.setattr("codexpert.tools.registry.lexical_search", fake_lexical_search)
+    monkeypatch.setattr("codexpert.tools.search.lexical_search", fake_lexical_search)
 
     lexical_tool = next(tool for tool in registry.as_langchain_tools() if tool.name == "lexical_search")
     runtime = _FakeRuntime(top_k=4, iterations=6, tool_call_id="call-42")
@@ -80,3 +82,34 @@ async def test_runtime_tool_returns_command_update_with_message(monkeypatch: pyt
     assert "lexical_search hits=2" in str(update["messages"][0].content)
     assert "a.py:1-2" in str(update["messages"][0].content)
     assert "x" in str(update["messages"][0].content)
+
+
+@pytest.mark.asyncio
+async def test_runtime_tool_exception_is_captured_as_observation_notes() -> None:
+    config = SimpleNamespace(top_k=7, ripgrep_enabled=True, enable_vector_index=True)
+    context = ToolContext(repo_index=object(), config=config)
+    runtime = _FakeRuntime(top_k=4, iterations=9, tool_call_id="call-err")
+
+    class Explode(RuntimeError):
+        pass
+
+    async def fake_handler(
+        _context: ToolContext, _kwargs: dict[str, object]
+    ) -> ToolObservation:
+        raise Explode("boom")
+
+    command = await run_tool_with_runtime(
+        "lexical_search",
+        runtime,
+        fake_handler,
+        context,
+        query="needle",
+    )
+    update = command.update
+
+    assert set(update.keys()) == {"observations", "evidence_set", "trace", "iterations", "messages"}
+    assert update["iterations"] == 1
+    assert update["trace"][0].iteration == 9
+    assert update["observations"][0].notes == "Explode: boom"
+    assert "notes=Explode: boom" in str(update["messages"][0].content)
+    assert update["messages"][0].tool_call_id == "call-err"

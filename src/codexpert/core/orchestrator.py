@@ -27,8 +27,8 @@ DEFAULT_AGENT_SYSTEM_PROMPT = (
     "Use repository tools to gather evidence before answering implementation "
     "questions. Prefer grep_search for exact identifiers and errors, read_file "
     "for cited line ranges, symbol and reference tools for code navigation, "
-    "semantic_search for conceptual discovery, doc_search for repository docs, "
-    "and git_history_search for change-history questions. Stop when you have "
+    "semantic_search for conceptual discovery, and doc_search for repository docs. "
+    "Stop when you have "
     "enough citation-ready evidence. Do not guess about implementation details "
     "when tools can inspect the repository."
 )
@@ -75,7 +75,8 @@ class ReActOrchestrator:
         self.repo_index = repo_index
         self.config = config
         self.tools = ToolRegistry(repo_index, config)
-        self._tools_node = ToolNode(self.tools.as_langchain_tools())
+        self.langchain_tools = self.tools.as_langchain_tools()
+        self._tools_node = ToolNode(self.langchain_tools)
         self.graph = self._build_graph()
 
     async def run(self, request: QueryRequest) -> QueryResponse:
@@ -138,7 +139,7 @@ class ReActOrchestrator:
         return "model"
 
     async def _model(self, state: ReActState) -> dict[str, Any]:
-        bound = self.llm.bind_tools(self.tools.as_langchain_tools())
+        bound = self.llm.bind_tools(self.langchain_tools)
         response = await bound.ainvoke(
             [
                 SystemMessage(content=self._agent_system_prompt()),

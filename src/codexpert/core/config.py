@@ -53,8 +53,8 @@ class AgentConfig(BaseModel):
         "Use repository tools to gather evidence before answering implementation "
         "questions. Prefer grep_search for exact identifiers and errors, read_file "
         "for cited line ranges, symbol and reference tools for code navigation, "
-        "semantic_search for conceptual discovery, doc_search for repository docs, "
-        "and git_history_search for change-history questions. Stop when you have "
+        "semantic_search for conceptual discovery, and doc_search for repository docs. "
+        "Stop when you have "
         "enough citation-ready evidence. Do not guess about implementation details "
         "when tools can inspect the repository."
     )

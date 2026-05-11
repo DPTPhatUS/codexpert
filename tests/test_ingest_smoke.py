@@ -3,7 +3,7 @@ from tempfile import TemporaryDirectory
 
 from codexpert.core.config import AgentConfig, RepoSpec
 from codexpert.memory.ingest import ensure_repo_index
-from codexpert.tools.lexical_search import lexical_search
+from codexpert.tools.search import lexical_search
 
 
 def test_ingest_smoke():
